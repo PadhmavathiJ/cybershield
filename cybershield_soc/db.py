@@ -16,7 +16,7 @@ def init_pool():
 
     user = os.getenv("ORACLE_USER")
     password = os.getenv("ORACLE_PASSWORD")
-    dsn = os.getenv("ORACLE_DSN", "localhost:1521/XEPDB1")
+    dsn = os.getenv("ORACLE_DSN", "localhost:1521/FREEPDB1")
 
     if not user or not password:
         raise RuntimeError(
