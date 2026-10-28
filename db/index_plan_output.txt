@@ -1,0 +1,94 @@
+﻿SQL> @"C:\Users\pooja\Documents\cybershield\cybershield\db\verification_index_plan.sql"
+
+PL/SQL procedure successfully completed.
+
+
+Table created.
+
+
+PL/SQL procedure successfully completed.
+
+BEFORE INDEX
+
+Explained.
+
+
+PLAN_TABLE_OUTPUT
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Plan hash value: 2311707382
+
+------------------------------------------------------------------------------------
+| Id  | Operation          | Name          | Rows  | Bytes | Cost (%CPU)| Time     |
+------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT   |               |     1 |    22 |   895   (1)| 00:00:01 |
+|*  1 |  FILTER            |               |       |       |            |          |
+|*  2 |   TABLE ACCESS FULL| CS_INDEX_DEMO |     1 |    22 |   895   (1)| 00:00:01 |
+------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   1 - filter(SYS_EXTRACT_UTC(TO_TIMESTAMP_TZ('2026-01-01 12:00:00
+              +00:00','YYYY-MM-DD HH24:MI:SS TZH:TZM'))>SYS_EXTRACT_UTC(TO_TIMESTAMP_TZ('2
+              026-01-01 00:00:00 +00:00','YYYY-MM-DD HH24:MI:SS TZH:TZM')))
+   2 - filter("SERVER_ID"=42 AND SYS_EXTRACT_UTC("EVENT_AT")>=SYS_EXTRACT_UT
+              C(TO_TIMESTAMP_TZ('2026-01-01 00:00:00 +00:00','YYYY-MM-DD HH24:MI:SS
+              TZH:TZM')) AND SYS_EXTRACT_UTC("EVENT_AT")<SYS_EXTRACT_UTC(TO_TIMESTAMP_TZ('
+              2026-01-01 12:00:00 +00:00','YYYY-MM-DD HH24:MI:SS TZH:TZM')))
+
+20 rows selected.
+
+
+Index created.
+
+
+PL/SQL procedure successfully completed.
+
+AFTER INDEX
+
+Explained.
+
+
+PLAN_TABLE_OUTPUT
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Plan hash value: 3980143932
+
+------------------------------------------------------------------------------------------------------
+| Id  | Operation                            | Name          | Rows  | Bytes | Cost (%CPU)| Time     |
+------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                     |               |    50 |  1650 |    53   (0)| 00:00:01 |
+|*  1 |  FILTER                              |               |       |       |            |          |
+|   2 |   TABLE ACCESS BY INDEX ROWID BATCHED| CS_INDEX_DEMO |    50 |  1650 |    53   (0)| 00:00:01 |
+|*  3 |    INDEX RANGE SCAN                  | CS_IX_DEMO    |    50 |       |     2   (0)| 00:00:01 |
+------------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   1 - filter(SYS_EXTRACT_UTC(TO_TIMESTAMP_TZ('2026-01-01 12:00:00 +00:00','YYYY-MM-DD
+              HH24:MI:SS TZH:TZM'))>SYS_EXTRACT_UTC(TO_TIMESTAMP_TZ('2026-01-01 00:00:00
+              +00:00','YYYY-MM-DD HH24:MI:SS TZH:TZM')))
+   3 - access("SERVER_ID"=42 AND SYS_EXTRACT_UTC("EVENT_AT")>=SYS_EXTRACT_UTC(TO_TIMESTAMP_TZ(
+              '2026-01-01 00:00:00 +00:00','YYYY-MM-DD HH24:MI:SS TZH:TZM')) AND
+              SYS_EXTRACT_UTC("EVENT_AT")<SYS_EXTRACT_UTC(TO_TIMESTAMP_TZ('2026-01-01 12:00:00
+              +00:00','YYYY-MM-DD HH24:MI:SS TZH:TZM')))
+
+21 rows selected.
+
+PASS: Demonstration query returns 57 matching rows
+OBSERVED: Full table scan before index creation
+OBSERVED: Optimizer selected the new index
+
+PL/SQL procedure successfully completed.
+
+
+Table dropped.
+
+
+7 rows deleted.
+
+
+Commit complete.
+
+Demonstration finished and synthetic table removed.
+SQL> SPOOL OFF
