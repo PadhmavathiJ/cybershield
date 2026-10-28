@@ -897,3 +897,499 @@ EXCEPTION
         RAISE;
 END sp_triage_alert;
 /
+CREATE OR REPLACE PROCEDURE sp_end_assignment (
+    p_actor_id IN NUMBER,
+    p_assignment_id IN NUMBER,
+    p_reason IN VARCHAR2
+) AUTHID DEFINER
+IS
+    v_incident_id NUMBER;
+    v_cycle_id NUMBER;
+    v_status incident.status%TYPE;
+    v_ended_at TIMESTAMP WITH TIME ZONE;
+    v_cycle_ended_at TIMESTAMP WITH TIME ZONE;
+    v_now TIMESTAMP WITH TIME ZONE;
+BEGIN
+    SAVEPOINT cs_end_assignment_start;
+
+    cs_security.require_manager(p_actor_id);
+
+    IF TRIM(p_reason) IS NULL OR LENGTH(p_reason) > 1000 THEN
+        RAISE_APPLICATION_ERROR(
+            -20010, 'An assignment ending reason is required'
+        );
+    END IF;
+
+    BEGIN
+        SELECT c.incident_id, c.cycle_id
+        INTO v_incident_id, v_cycle_id
+        FROM incident_assignment a
+        JOIN investigation_cycle c ON c.cycle_id = a.cycle_id
+        WHERE a.assignment_id = p_assignment_id;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(
+                -20001, 'Assignment not found'
+            );
+    END;
+
+    SELECT status
+    INTO v_status
+    FROM incident
+    WHERE incident_id = v_incident_id
+    FOR UPDATE WAIT 5;
+
+    SELECT a.ended_at, c.ended_at
+    INTO v_ended_at, v_cycle_ended_at
+    FROM incident_assignment a
+    JOIN investigation_cycle c ON c.cycle_id = a.cycle_id
+    WHERE a.assignment_id = p_assignment_id
+    FOR UPDATE OF a.ended_at WAIT 5;
+
+    IF v_status IN ('RESOLVED', 'CLOSED')
+       OR v_ended_at IS NOT NULL
+       OR v_cycle_ended_at IS NOT NULL
+    THEN
+        RAISE_APPLICATION_ERROR(
+            -20004, 'Assignment is not eligible to be ended'
+        );
+    END IF;
+
+    v_now := SYSTIMESTAMP;
+
+    UPDATE incident_assignment
+    SET ended_at = v_now
+    WHERE assignment_id = p_assignment_id;
+
+    INSERT INTO audit_log (
+        actor_user_id,
+        action,
+        entity_name,
+        entity_id,
+        occurred_at,
+        after_data
+    ) VALUES (
+        p_actor_id,
+        'ASSIGNMENT_END_REASON',
+        'incident_assignment',
+        p_assignment_id,
+        v_now,
+        p_reason
+    );
+
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK TO cs_end_assignment_start;
+        RAISE;
+END sp_end_assignment;
+/
+
+
+CREATE OR REPLACE PROCEDURE sp_resolve_incident (
+    p_actor_id IN NUMBER,
+    p_incident_id IN NUMBER,
+    p_summary IN CLOB,
+    p_root_cause IN CLOB,
+    p_lessons_learned IN CLOB,
+    p_financial_loss IN NUMBER,
+    p_resolution_id OUT NUMBER
+) AUTHID DEFINER
+IS
+    v_status incident.status%TYPE;
+    v_cycle_id NUMBER;
+    v_count NUMBER;
+    v_now TIMESTAMP WITH TIME ZONE;
+BEGIN
+    SAVEPOINT cs_resolve_start;
+
+    p_resolution_id := NULL;
+
+    cs_security.require_operator(p_actor_id);
+
+    IF p_summary IS NULL
+       OR p_root_cause IS NULL
+       OR p_financial_loss IS NULL
+    THEN
+        RAISE_APPLICATION_ERROR(
+            -20006, 'Summary root cause and financial loss are required'
+        );
+    END IF;
+
+    IF DBMS_LOB.GETLENGTH(p_summary) = 0
+       OR DBMS_LOB.GETLENGTH(p_root_cause) = 0
+       OR p_financial_loss < 0
+       OR p_financial_loss >= 1E12
+       OR p_financial_loss <> ROUND(p_financial_loss, 2)
+    THEN
+        RAISE_APPLICATION_ERROR(
+            -20006, 'Invalid resolution fields'
+        );
+    END IF;
+
+    BEGIN
+        SELECT status
+        INTO v_status
+        FROM incident
+        WHERE incident_id = p_incident_id
+        FOR UPDATE WAIT 5;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(
+                -20001, 'Incident not found'
+            );
+    END;
+
+    cs_security.require_incident_access(
+        p_actor_id, p_incident_id, 1
+    );
+
+    IF v_status IN ('RESOLVED', 'CLOSED') THEN
+        RAISE_APPLICATION_ERROR(
+            -20005, 'Incident is already resolved'
+        );
+    END IF;
+
+    IF v_status <> 'CONTAINED' THEN
+        RAISE_APPLICATION_ERROR(
+            -20004, 'Contain the incident before resolving it'
+        );
+    END IF;
+
+    cs_security.get_active_cycle(
+        p_incident_id, v_cycle_id
+    );
+
+    SELECT COUNT(*)
+    INTO v_count
+    FROM resolution
+    WHERE cycle_id = v_cycle_id;
+
+    IF v_count > 0 THEN
+        RAISE_APPLICATION_ERROR(
+            -20005, 'Investigation cycle already has a resolution'
+        );
+    END IF;
+
+    SELECT COUNT(*)
+    INTO v_count
+    FROM response_action
+    WHERE cycle_id = v_cycle_id;
+
+    IF v_count = 0 THEN
+        RAISE_APPLICATION_ERROR(
+            -20006, 'Record a response action before resolution'
+        );
+    END IF;
+
+    v_now := SYSTIMESTAMP;
+
+    INSERT INTO resolution (
+        cycle_id,
+        resolved_by,
+        resolved_at,
+        summary,
+        root_cause,
+        lessons_learned,
+        financial_loss
+    ) VALUES (
+        v_cycle_id,
+        p_actor_id,
+        v_now,
+        p_summary,
+        p_root_cause,
+        p_lessons_learned,
+        p_financial_loss
+    )
+    RETURNING resolution_id INTO p_resolution_id;
+
+    UPDATE incident
+    SET status = 'RESOLVED',
+        closed_at = NULL
+    WHERE incident_id = p_incident_id;
+
+    INSERT INTO incident_status_history (
+        cycle_id,
+        from_status,
+        to_status,
+        changed_by,
+        changed_at,
+        reason
+    ) VALUES (
+        v_cycle_id,
+        'CONTAINED',
+        'RESOLVED',
+        p_actor_id,
+        v_now,
+        'Resolution recorded'
+    );
+
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK TO cs_resolve_start;
+        p_resolution_id := NULL;
+        RAISE;
+END sp_resolve_incident;
+/
+
+
+CREATE OR REPLACE PROCEDURE sp_reopen_incident (
+    p_actor_id IN NUMBER,
+    p_incident_id IN NUMBER,
+    p_reason IN VARCHAR2,
+    p_cycle_id OUT NUMBER
+) AUTHID DEFINER
+IS
+    v_status incident.status%TYPE;
+    v_old_cycle NUMBER;
+    v_old_cycle_no NUMBER;
+    v_old_ended_at TIMESTAMP WITH TIME ZONE;
+    v_count NUMBER;
+    v_response_hours NUMBER;
+    v_resolution_hours NUMBER;
+    v_now TIMESTAMP WITH TIME ZONE;
+BEGIN
+    SAVEPOINT cs_reopen_start;
+
+    p_cycle_id := NULL;
+
+    cs_security.require_manager(p_actor_id);
+
+    IF TRIM(p_reason) IS NULL OR LENGTH(p_reason) > 1000 THEN
+        RAISE_APPLICATION_ERROR(
+            -20010, 'A reopening reason is required'
+        );
+    END IF;
+
+    BEGIN
+        SELECT status
+        INTO v_status
+        FROM incident
+        WHERE incident_id = p_incident_id
+        FOR UPDATE WAIT 5;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(
+                -20001, 'Incident not found'
+            );
+    END;
+
+    IF v_status NOT IN ('RESOLVED', 'CLOSED') THEN
+        RAISE_APPLICATION_ERROR(
+            -20004, 'Only resolved or closed incidents can be reopened'
+        );
+    END IF;
+
+    BEGIN
+        SELECT cycle_id, cycle_no, ended_at
+        INTO v_old_cycle, v_old_cycle_no, v_old_ended_at
+        FROM investigation_cycle
+        WHERE incident_id = p_incident_id
+          AND cycle_no = (
+              SELECT MAX(cycle_no)
+              FROM investigation_cycle
+              WHERE incident_id = p_incident_id
+          );
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(
+                -20010, 'Incident is missing its investigation cycle'
+            );
+    END;
+
+    SELECT COUNT(*)
+    INTO v_count
+    FROM resolution
+    WHERE cycle_id = v_old_cycle;
+
+    IF v_count <> 1 THEN
+        RAISE_APPLICATION_ERROR(
+            -20006, 'Previous cycle must have a resolution'
+        );
+    END IF;
+
+    IF (v_status = 'RESOLVED' AND v_old_ended_at IS NOT NULL)
+       OR (v_status = 'CLOSED' AND v_old_ended_at IS NULL)
+    THEN
+        RAISE_APPLICATION_ERROR(
+            -20010, 'Incident and cycle states are inconsistent'
+        );
+    END IF;
+
+    BEGIN
+        SELECT number_value
+        INTO v_response_hours
+        FROM soc_policy
+        WHERE policy_key = 'response_hours';
+
+        SELECT number_value
+        INTO v_resolution_hours
+        FROM soc_policy
+        WHERE policy_key = 'resolution_hours';
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(
+                -20010, 'SLA policies are not configured'
+            );
+    END;
+
+    IF v_response_hours <= 0
+       OR v_resolution_hours < v_response_hours
+    THEN
+        RAISE_APPLICATION_ERROR(
+            -20010, 'Invalid SLA policy values'
+        );
+    END IF;
+
+    v_now := SYSTIMESTAMP;
+
+    UPDATE incident_assignment
+    SET ended_at = v_now
+    WHERE cycle_id = v_old_cycle
+      AND ended_at IS NULL;
+
+    UPDATE investigation_cycle
+    SET ended_at = v_now
+    WHERE cycle_id = v_old_cycle
+      AND ended_at IS NULL;
+
+    INSERT INTO investigation_cycle (
+        incident_id,
+        cycle_no,
+        started_at,
+        reopen_reason
+    ) VALUES (
+        p_incident_id,
+        v_old_cycle_no + 1,
+        v_now,
+        p_reason
+    )
+    RETURNING cycle_id INTO p_cycle_id;
+
+    INSERT INTO sla (
+        cycle_id,
+        response_due_at,
+        resolution_due_at
+    ) VALUES (
+        p_cycle_id,
+        v_now + NUMTODSINTERVAL(v_response_hours, 'HOUR'),
+        v_now + NUMTODSINTERVAL(v_resolution_hours, 'HOUR')
+    );
+
+    UPDATE incident
+    SET status = 'OPEN',
+        closed_at = NULL
+    WHERE incident_id = p_incident_id;
+
+    INSERT INTO incident_status_history (
+        cycle_id,
+        from_status,
+        to_status,
+        changed_by,
+        changed_at,
+        reason
+    ) VALUES (
+        p_cycle_id,
+        v_status,
+        'OPEN',
+        p_actor_id,
+        v_now,
+        p_reason
+    );
+
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK TO cs_reopen_start;
+        p_cycle_id := NULL;
+        RAISE;
+END sp_reopen_incident;
+/
+
+
+CREATE OR REPLACE PROCEDURE sp_escalate_sla (
+    p_actor_id IN NUMBER,
+    p_incident_id IN NUMBER,
+    p_breach_reason IN VARCHAR2
+) AUTHID DEFINER
+IS
+    v_status incident.status%TYPE;
+    v_cycle_id NUMBER;
+    v_response_due TIMESTAMP WITH TIME ZONE;
+    v_resolution_due TIMESTAMP WITH TIME ZONE;
+    v_acknowledged TIMESTAMP WITH TIME ZONE;
+    v_now TIMESTAMP WITH TIME ZONE;
+BEGIN
+    SAVEPOINT cs_escalate_start;
+
+    cs_security.require_manager(p_actor_id);
+
+    IF TRIM(p_breach_reason) IS NULL
+       OR LENGTH(p_breach_reason) > 1000
+    THEN
+        RAISE_APPLICATION_ERROR(
+            -20010, 'A breach reason is required'
+        );
+    END IF;
+
+    BEGIN
+        SELECT status
+        INTO v_status
+        FROM incident
+        WHERE incident_id = p_incident_id
+        FOR UPDATE WAIT 5;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(
+                -20001, 'Incident not found'
+            );
+    END;
+
+    IF v_status IN ('RESOLVED', 'CLOSED') THEN
+        RAISE_APPLICATION_ERROR(
+            -20004, 'SLA escalation requires an unresolved incident'
+        );
+    END IF;
+
+    cs_security.get_active_cycle(
+        p_incident_id, v_cycle_id
+    );
+
+    BEGIN
+        SELECT response_due_at,
+               resolution_due_at,
+               acknowledged_at
+        INTO v_response_due,
+             v_resolution_due,
+             v_acknowledged
+        FROM sla
+        WHERE cycle_id = v_cycle_id
+        FOR UPDATE WAIT 5;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(
+                -20010, 'Investigation cycle is missing its SLA'
+            );
+    END;
+
+    v_now := SYSTIMESTAMP;
+
+    IF NOT (
+        v_response_due < COALESCE(v_acknowledged, v_now)
+        OR v_resolution_due < v_now
+    ) THEN
+        RAISE_APPLICATION_ERROR(
+            -20004, 'SLA has not breached its deadlines'
+        );
+    END IF;
+
+    UPDATE sla
+    SET escalated_at = v_now,
+        escalated_by = p_actor_id,
+        breach_reason = p_breach_reason
+    WHERE cycle_id = v_cycle_id;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK TO cs_escalate_start;
+        RAISE;
+END sp_escalate_sla;
+/
