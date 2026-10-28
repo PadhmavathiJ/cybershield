@@ -1,7 +1,8 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, abort, session
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, session, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from pathlib import Path
+from db import get_connection, close_pool
 import sqlite3, json, secrets, os
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -407,14 +408,133 @@ def admin_users():
     users=con.execute('SELECT user_id,full_name,email,role,is_active,created_at,specialization,max_severity FROM users ORDER BY user_id DESC').fetchall()
     con.close(); return render_template('users.html',users=users)
 
-@app.route('/health')
-def health():
-    con=connect_db(); names=[r['name'] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchall()]; con.close(); return {'status':'ok','database':DB_PATH.name,'core_tables':len(TABLES),'application_tables':len(names)}
+@app.route('/health/oracle')
+def oracle_health():
+    con = None
+    cur = None
+
+    try:
+        con = get_connection()
+        cur = con.cursor()
+        cur.execute("SELECT 1 FROM dual")
+        result = cur.fetchone()
+
+        if result and result[0] == 1:
+            return {'status': 'ok', 'database': 'oracle'}, 200
+
+        return {'status': 'unavailable'}, 503
+
+    except Exception:
+        app.logger.exception("Oracle health check failed")
+        return {'status': 'unavailable'}, 503
+
+    finally:
+        if cur is not None:
+            cur.close()
+
+        if con is not None:
+            con.close()
 
 @app.errorhandler(403)
 def forbidden(e): return render_template('error.html',code=403,message='You do not have permission to view or change this resource.'),403
 @app.errorhandler(404)
 def not_found(e): return render_template('error.html',code=404,message='The requested page or record was not found.'),404
+
+@app.route('/evidence/<int:evidence_id>/download', methods=['GET'])
+@login_required
+def download_evidence(evidence_id):
+    con = None
+    cur = None
+
+    try:
+        con = get_connection()
+        cur = con.cursor()
+
+        cur.execute(
+            """
+            SELECT evidence_id, incident_id, storage_key, original_name
+            FROM cs_owner.evidence
+            WHERE evidence_id = :evidence_id
+            """,
+            {"evidence_id": evidence_id}
+        )
+
+        ev = cur.fetchone()
+
+        if ev is None:
+            return {"error": "Evidence not found"}, 404
+
+        role = str(session.get("role", "")).upper()
+        user_id = session.get("user_id")
+
+        if role == "ADMIN":
+            allowed = True
+        elif role == "ANALYST":
+            cur.execute(
+                """
+                SELECT 1
+                FROM cs_owner.investigator iv
+                JOIN cs_owner.incident_assignment ia
+                  ON ia.investigator_id = iv.investigator_id
+                JOIN cs_owner.investigation_cycle ic
+                  ON ic.cycle_id = ia.cycle_id
+                WHERE iv.user_id = :user_id
+                  AND ic.incident_id = :incident_id
+                  AND ic.ended_at IS NULL
+                  AND ia.ended_at IS NULL
+                FETCH FIRST 1 ROWS ONLY
+                """,
+                {
+                    "user_id": user_id,
+                    "incident_id": ev[1]
+                }
+            )
+            allowed = cur.fetchone() is not None
+        else:
+            allowed = False
+
+        if not allowed:
+            return {"error": "Forbidden"}, 403
+
+        upload_dir = os.getenv("UPLOAD_DIR")
+
+        if not upload_dir:
+            app.logger.error("UPLOAD_DIR is not configured")
+            return {"error": "Evidence storage unavailable"}, 503
+
+        root = Path(upload_dir).expanduser().resolve()
+        storage_key = ev[2]
+        original_name = ev[3]
+
+        if not storage_key or not original_name:
+            return {"error": "Evidence file not found"}, 404
+
+        file_path = (root / storage_key).resolve()
+
+        if not file_path.is_relative_to(root):
+            return {"error": "Evidence file not found"}, 404
+
+        if not file_path.is_file():
+            return {"error": "Evidence file not found"}, 404
+
+        download_name = Path(str(original_name)).name
+
+        return send_file(
+            file_path,
+            as_attachment=True,
+            download_name=download_name
+        )
+
+    except Exception:
+        app.logger.exception("Evidence download failed")
+        return {"error": "Evidence service unavailable"}, 503
+
+    finally:
+        if cur is not None:
+            cur.close()
+
+        if con is not None:
+            con.close()
 
 if __name__=='__main__':
     init_db()

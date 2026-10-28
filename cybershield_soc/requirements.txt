@@ -1,2 +1,6 @@
 Flask>=3.0,<4.0
 Werkzeug>=3.0,<4.0
+oracledb>=2.0
+python-dotenv>=1.0
+Flask-WTF>=1.2
+pytest>=8.0
