@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -10,6 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='soc.css') }}">
 </head>
 <body>
 {% if me.user_id %}
@@ -23,21 +24,21 @@
   <nav class="primary-nav" aria-label="Main navigation">
     <a class="nav-link {% if request.endpoint == 'home' %}active{% endif %}"
        href="{{ url_for('home') }}" {% if request.endpoint == 'home' %}aria-current="page"{% endif %}>
-      <span aria-hidden="true">◈</span> Overview
+      <span aria-hidden="true">â—ˆ</span> Overview
     </a>
     {% if me.role == 'admin' %}
     <a class="nav-link {% if request.endpoint in ['table_index','list_records','create_record','edit_record','edit_campaign_event','delete_campaign_event','delete_record'] %}active{% endif %}"
        href="{{ url_for('table_index') }}">
-      <span aria-hidden="true">▤</span> Database explorer
+      <span aria-hidden="true">â–¤</span> Database explorer
     </a>
     <a class="nav-link {% if request.endpoint == 'admin_users' %}active{% endif %}"
        href="{{ url_for('admin_users') }}">
-      <span aria-hidden="true">♙</span> User access
+      <span aria-hidden="true">â™™</span> User access
     </a>
     {% elif me.role == 'complainer' %}
     <a class="nav-link {% if request.endpoint == 'new_incident' %}active{% endif %}"
        href="{{ url_for('new_incident') }}">
-      <span aria-hidden="true">＋</span> Report an incident
+      <span aria-hidden="true">ï¼‹</span> Report an incident
     </a>
     {% endif %}
   </nav>
@@ -57,7 +58,7 @@
     </div>
     <form method="post" action="{{ url_for('logout') }}">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-      <button class="logout" type="submit"><span aria-hidden="true">↗</span> Sign out</button>
+      <button class="logout" type="submit"><span aria-hidden="true">â†—</span> Sign out</button>
     </form>
   </div>
 </aside>
@@ -92,7 +93,7 @@
   </section>
 
   <footer class="footer">
-    CYBERSHIELD SOC <span>·</span> Incident intelligence, handled responsibly
+    CYBERSHIELD SOC <span>Â·</span> Incident intelligence, handled responsibly
   </footer>
 </main>
 </body>
