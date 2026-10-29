@@ -52,6 +52,6 @@ def execute_procedure(name, params, actor_id):
         if cur is not None:
             cur.close()
         try:
-            con.client_identifier = ""
+            con.client_identifier = None
         finally:
             con.close()

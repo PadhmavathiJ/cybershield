@@ -4,15 +4,10 @@
 {% block content %}
 <section class="soc-page">
   <div class="soc-page-head"><div><p class="eyebrow">SERVER INVENTORY</p><h1>Servers</h1><p class="muted">Operational records shown according to your access permissions.</p></div></div>
-  <form class="soc-filters" method="get" role="search">
-    <label>Search<input name="q" value="{{ filters.q if filters else request.args.get('q','') }}" placeholder="Search records"></label>
-    <label>Status<select name="status"><option value="">All statuses</option>{% for value in ['NEW','ACKNOWLEDGED','ESCALATED','DISMISSED','OPEN','TRIAGED','INVESTIGATING','CONTAINED','RESOLVED','CLOSED'] %}<option value="{{ value }}" {% if filters and filters.status == value %}selected{% endif %}>{{ value|title }}</option>{% endfor %}</select></label>
-    <label>Severity<select name="severity"><option value="">All severities</option>{% for value in ['LOW','MEDIUM','HIGH','CRITICAL'] %}<option value="{{ value }}" {% if filters and filters.severity == value %}selected{% endif %}>{{ value|title }}</option>{% endfor %}</select></label>
-    <button class="btn primary" type="submit">Apply filters</button><a class="btn secondary" href="{{ request.path }}">Clear</a>
-  </form>
+  {% with statuses=[], has_severity=true, has_dates=false %}{% include 'list_filters.html' %}{% endwith %}
   <div class="soc-table-wrap"><table class="soc-table"><thead><tr><th scope="col">Hostname</th><th scope="col">Operating system</th><th scope="col">Department</th><th scope="col">Criticality</th><th scope="col">Active</th></tr></thead><tbody>
   {% for item in items|default([]) %}<tr><td>{{ item.get("hostname", "—") or "—" }}</td><td>{{ item.get("os_name", "—") or "—" }}</td><td>{{ item.get("department", "—") or "—" }}</td><td>{{ item.get("criticality", "—") or "—" }}</td><td>{{ item.get("is_active", "—") or "—" }}</td></tr>{% else %}<tr><td class="empty" colspan="5">No servers match these filters.</td></tr>{% endfor %}
   </tbody></table></div>
-  {% if pagination %}<nav class="soc-pagination" aria-label="Pagination"><span>Page {{ pagination.page }} of {{ pagination.pages }} · {{ pagination.total }} records</span><div>{% if pagination.page > 1 %}<a class="btn secondary" href="?page={{ pagination.page - 1 }}&q={{ filters.q|urlencode if filters else '' }}&status={{ filters.status|urlencode if filters else '' }}&severity={{ filters.severity|urlencode if filters else '' }}">Previous</a>{% endif %}{% if pagination.page < pagination.pages %}<a class="btn secondary" href="?page={{ pagination.page + 1 }}&q={{ filters.q|urlencode if filters else '' }}&status={{ filters.status|urlencode if filters else '' }}&severity={{ filters.severity|urlencode if filters else '' }}">Next</a>{% endif %}</div></nav>{% endif %}
+  {% if pagination %}<nav class="soc-pagination" aria-label="Pagination"><span>Page {{ pagination.page }} of {{ pagination.pages }} · {{ pagination.total }} records</span><div>{% if pagination.page > 1 %}<a class="btn secondary" href="{{ page_url(pagination.page - 1) }}">Previous</a>{% endif %}{% if pagination.page < pagination.pages %}<a class="btn secondary" href="{{ page_url(pagination.page + 1) }}">Next</a>{% endif %}</div></nav>{% endif %}
 </section>
 {% endblock %}

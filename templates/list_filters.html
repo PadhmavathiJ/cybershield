@@ -1,0 +1,6 @@
+<form class="soc-filters" method="get" role="search">
+<label>Search<input name="q" value="{{ request.args.get('q','') }}" placeholder="{{ search_label|default('Search records') }}"></label>
+{% if statuses %}<label>{{ status_label|default('Status') }}<select name="status"><option value="">All</option>{% for value in statuses %}<option {% if request.args.get('status') == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>{% endif %}
+{% if has_severity %}<label>Severity<select name="severity"><option value="">All</option>{% for value in ['LOW','MEDIUM','HIGH','CRITICAL'] %}<option {% if request.args.get('severity') == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>{% endif %}
+{% if has_dates %}{% for name in ['from','to'] %}<label>{{ name|title }} (UTC)<input type="date" name="{{ name }}" value="{{ request.args.get(name,'') }}"></label>{% endfor %}{% endif %}
+{% if request.endpoint == 'events' %}{% for name,label in [('min_score','Minimum score'),('max_score','Maximum score')] %}<label>{{ label }}<input name="{{ name }}" type="number" min="0" max="100" step="0.01" value="{{ request.args.get(name,'') }}"></label>{% endfor %}{% endif %}<button class="btn primary" type="submit">Apply filters</button><a class="btn secondary" href="{{ request.path }}">Clear</a></form>

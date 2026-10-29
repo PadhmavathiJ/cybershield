@@ -7,9 +7,9 @@
   {% if upload %}
   <form method="post" enctype="multipart/form-data" class="soc-form">
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-    <label>Incident<select name="incident_id" required>{% for i in incidents|default([]) %}<option value="{{ i.incident_id }}">#{{ i.incident_id }} · {{ i.title }}</option>{% endfor %}</select></label>
+    <label>Incident<select name="incident_id" required>{% for i in incidents|default([]) %}<option value="{{ i.incident_id }}" {% if (request.args.get('incident_id','')|int) == i.incident_id %}selected{% endif %}>#{{ i.incident_id }} · {{ i.title }}</option>{% endfor %}</select></label>
     <label>Evidence type<select name="evidence_type"><option>LOG</option><option>IMAGE</option><option>DOCUMENT</option><option>NETWORK_CAPTURE</option><option>OTHER</option></select></label>
-    <label>Sensitivity<select name="sensitivity"><option>INTERNAL</option><option>CONFIDENTIAL</option><option>RESTRICTED</option><option>PUBLIC</option></select></label>
+    <label>Sensitivity<select name="sensitivity"><option>INTERNAL</option><option>RESTRICTED</option></select></label>
     <label>File<input type="file" name="file" required></label>
     <button class="btn primary" type="submit">Upload and register evidence</button>
   </form>

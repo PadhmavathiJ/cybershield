@@ -2,17 +2,12 @@
 {% block title %}Security events · CyberShield SOC{% endblock %}
 {% block heading %}Security events{% endblock %}
 {% block content %}
-<section class="soc-page">
+<section class="soc-page">{% if me.role_code == "ADMIN" %}<a class="btn primary" href="{{ url_for('ingest_event') }}">Submit simulated event</a>{% endif %}
   <div class="soc-page-head"><div><p class="eyebrow">SIMULATED EVENT INGESTION</p><h1>Security events</h1><p class="muted">Operational records shown according to your access permissions.</p></div></div>
-  <form class="soc-filters" method="get" role="search">
-    <label>Search<input name="q" value="{{ filters.q if filters else request.args.get('q','') }}" placeholder="Search records"></label>
-    <label>Status<select name="status"><option value="">All statuses</option>{% for value in ['NEW','ACKNOWLEDGED','ESCALATED','DISMISSED','OPEN','TRIAGED','INVESTIGATING','CONTAINED','RESOLVED','CLOSED'] %}<option value="{{ value }}" {% if filters and filters.status == value %}selected{% endif %}>{{ value|title }}</option>{% endfor %}</select></label>
-    <label>Severity<select name="severity"><option value="">All severities</option>{% for value in ['LOW','MEDIUM','HIGH','CRITICAL'] %}<option value="{{ value }}" {% if filters and filters.severity == value %}selected{% endif %}>{{ value|title }}</option>{% endfor %}</select></label>
-    <button class="btn primary" type="submit">Apply filters</button><a class="btn secondary" href="{{ request.path }}">Clear</a>
-  </form>
+  {% with statuses=[], has_severity=false, has_dates=true %}{% include 'list_filters.html' %}{% endwith %}
   <div class="soc-table-wrap"><table class="soc-table"><thead><tr><th scope="col">Event ID</th><th scope="col">Event time</th><th scope="col">Server</th><th scope="col">Source IP</th><th scope="col">Attack type</th><th scope="col">Score</th><th scope="col">Simulated</th></tr></thead><tbody>
-  {% for item in items|default([]) %}<tr><td>{{ item.get("event_id", "—") or "—" }}</td><td>{{ item.get("event_at", "—") or "—" }}</td><td>{{ item.get("hostname", "—") or "—" }}</td><td>{{ item.get("source_ip", "—") or "—" }}</td><td>{{ item.get("attack_type", "—") or "—" }}</td><td>{{ item.get("severity_score", "—") or "—" }}</td><td>{{ item.get("is_simulated", "—") or "—" }}</td></tr>{% else %}<tr><td class="empty" colspan="7">No events found. Ingested demo events should be labelled simulated.</td></tr>{% endfor %}
+  {% for item in items|default([]) %}<tr><td><a href="{{ url_for('event_detail', event_id=item.event_id) }}">{{ item.get("event_id", "—") or "—" }}</a></td><td>{{ item.get("event_at", "—") or "—" }}</td><td>{{ item.get("hostname", "—") or "—" }}</td><td>{{ item.get("source_ip", "—") or "—" }}</td><td>{{ item.get("attack_type", "—") or "—" }}</td><td>{{ item.get("severity_score", "—") or "—" }}</td><td>{{ item.get("is_simulated", "—") or "—" }}</td></tr>{% else %}<tr><td class="empty" colspan="7">No events found. Ingested demo events should be labelled simulated.</td></tr>{% endfor %}
   </tbody></table></div>
-  {% if pagination %}<nav class="soc-pagination" aria-label="Pagination"><span>Page {{ pagination.page }} of {{ pagination.pages }} · {{ pagination.total }} records</span><div>{% if pagination.page > 1 %}<a class="btn secondary" href="?page={{ pagination.page - 1 }}&q={{ filters.q|urlencode if filters else '' }}&status={{ filters.status|urlencode if filters else '' }}&severity={{ filters.severity|urlencode if filters else '' }}">Previous</a>{% endif %}{% if pagination.page < pagination.pages %}<a class="btn secondary" href="?page={{ pagination.page + 1 }}&q={{ filters.q|urlencode if filters else '' }}&status={{ filters.status|urlencode if filters else '' }}&severity={{ filters.severity|urlencode if filters else '' }}">Next</a>{% endif %}</div></nav>{% endif %}
+  {% if pagination %}<nav class="soc-pagination" aria-label="Pagination"><span>Page {{ pagination.page }} of {{ pagination.pages }} · {{ pagination.total }} records</span><div>{% if pagination.page > 1 %}<a class="btn secondary" href="{{ page_url(pagination.page - 1) }}">Previous</a>{% endif %}{% if pagination.page < pagination.pages %}<a class="btn secondary" href="{{ page_url(pagination.page + 1) }}">Next</a>{% endif %}</div></nav>{% endif %}
 </section>
 {% endblock %}

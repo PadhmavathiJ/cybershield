@@ -14,6 +14,8 @@ def init_pool():
     dsn = os.getenv("ORACLE_DSN", "localhost:1521/FREEPDB1")
     if not user or not password:
         raise RuntimeError("Set ORACLE_USER and ORACLE_PASSWORD in .env before starting Flask.")
+    if user.upper() != "CS_APP":
+        raise RuntimeError("CyberShield runtime must connect as restricted CS_APP.")
     _pool = oracledb.create_pool(user=user, password=password, dsn=dsn, min=1, max=5, increment=1)
     return _pool
 

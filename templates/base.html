@@ -7,10 +7,10 @@
 <aside class="sidebar"><a class="brand" href="{{ url_for('dashboard') }}"><span class="brand-mark">C</span><span>CYBER<span class="brand-accent">SHIELD</span><small>SECURITY OPERATIONS</small></span></a>
 <div class="side-label">WORKSPACE</div><nav class="primary-nav" aria-label="Main navigation">
 {% for endpoint,label in [('dashboard','Overview'),('servers','Servers'),('events','Events'),('alerts','Alerts'),('incidents','Incidents'),('assignments','Assignments'),('evidence_list','Evidence'),('response','Response'),('sla','SLA'),('reports','Reports'),('threat_intel','Threat intelligence'),('settings','Settings'),('audit','Audit trail')] %}
-{% if endpoint != 'audit' or me.role_code in ['ADMIN','AUDITOR'] %}
-<a class="nav-link {% if request.endpoint == endpoint %}active{% endif %}" href="{{ url_for(endpoint) }}">{{ label }}</a>
+{% if (endpoint != 'audit' or me.role_code in ['ADMIN','AUDITOR']) and (endpoint != 'settings' or me.role_code == 'ADMIN') and (me.role_code != 'ANALYST' or endpoint not in ['servers','assignments','reports']) %}
+<a class="nav-link {% if request.endpoint == endpoint %}active{% endif %}" href="{{ url_for(endpoint) }}">{{ 'My investigations' if endpoint == 'dashboard' and me.role_code == 'ANALYST' else label }}</a>
 {% endif %}{% endfor %}
-{% if me.role_code == 'ADMIN' %}<a class="nav-link" href="{{ url_for('admin_users') }}">User access</a><a class="nav-link" href="{{ url_for('table_index') }}">Database explorer</a>{% endif %}
+{% if me.role_code == 'ADMIN' %}<a class="nav-link" href="{{ url_for('admin_assets') }}">Asset administration</a><a class="nav-link" href="{{ url_for('admin_users') }}">User access</a><a class="nav-link" href="{{ url_for('table_index') }}">Database explorer</a>{% endif %}
 </nav><div class="sidebar-note"><span class="status-dot"></span><div><strong>Workspace status</strong><small>Oracle-backed application</small></div></div>
 <div class="side-bottom"><div class="user-mini"><div class="avatar">{{ (me.full_name or 'U')[:1]|upper }}</div><div class="user-meta"><strong>{{ me.full_name }}</strong><span>{{ me.role_code }}</span></div></div>
 <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="_csrf" value="{{ csrf_token }}"><button class="logout" type="submit">Sign out</button></form></div></aside>{% endif %}
