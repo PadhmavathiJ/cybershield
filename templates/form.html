@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}{{ title or 'Form' }} · CyberShield SOC{% endblock %}
+{% block heading %}{{ title or 'Form' }}{% endblock %}
+{% block content %}
+<section class="soc-page">
+  <div class="soc-page-head"><div><p class="eyebrow">CONTROLLED WORKFLOW</p><h1>{{ title or 'Submit details' }}</h1></div></div>
+  {% if upload %}
+  <form method="post" enctype="multipart/form-data" class="soc-form">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <label>Incident<select name="incident_id" required>{% for i in incidents|default([]) %}<option value="{{ i.incident_id }}">#{{ i.incident_id }} · {{ i.title }}</option>{% endfor %}</select></label>
+    <label>Evidence type<select name="evidence_type"><option>LOG</option><option>IMAGE</option><option>DOCUMENT</option><option>NETWORK_CAPTURE</option><option>OTHER</option></select></label>
+    <label>Sensitivity<select name="sensitivity"><option>INTERNAL</option><option>CONFIDENTIAL</option><option>RESTRICTED</option><option>PUBLIC</option></select></label>
+    <label>File<input type="file" name="file" required></label>
+    <button class="btn primary" type="submit">Upload and register evidence</button>
+  </form>
+  {% else %}
+  <form method="post" class="soc-form"><input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  {% for field in fields|default([]) %}<label>{{ field.label }}<input name="{{ field.name }}" type="{{ field.type or 'text' }}" required="{{ field.required or false }}"></label>{% endfor %}
+  <button class="btn primary" type="submit">{{ submit_label or 'Submit' }}</button></form>
+  {% endif %}
+</section>
+{% endblock %}
