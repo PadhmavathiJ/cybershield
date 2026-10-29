@@ -1,0 +1,8 @@
+{% extends 'base.html' %}{% block title %}Create incident · CyberShield SOC{% endblock %}{% block heading %}Create incident{% endblock %}{% block content %}
+<section class="soc-page"><div class="soc-page-head"><div><p class="eyebrow">INCIDENT INTAKE</p><h1>Create an incident</h1><p class="muted">Incident creation is validated by Oracle PL/SQL.</p></div></div>
+<form method="post" class="soc-form"><input type="hidden" name="_csrf" value="{{ csrf_token }}">
+<label>Alert<select name="alert_id" required>{% for a in alerts|default([]) %}<option value="{{ a.alert_id }}">#{{ a.alert_id }} · {{ a.severity }} · {{ a.status }}</option>{% endfor %}</select></label>
+<label>Title<input name="title" maxlength="200" required></label><label>Description<textarea name="description" required rows="4"></textarea></label>
+<label>Severity<select name="severity" required><option>LOW</option><option>MEDIUM</option><option>HIGH</option><option>CRITICAL</option></select></label>
+<label>Campaign (optional)<select name="campaign_id"><option value="">No campaign</option>{% for c in campaigns|default([]) %}<option value="{{ c.campaign_id }}">{{ c.name }}</option>{% endfor %}</select></label>
+<button class="btn primary" type="submit">Create incident</button></form></section>{% endblock %}

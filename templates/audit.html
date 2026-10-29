@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}Audit trail · CyberShield SOC{% endblock %}
+{% block heading %}Audit trail{% endblock %}
+{% block content %}
+<section class="soc-page">
+  <div class="soc-page-head"><div><p class="eyebrow">READ-ONLY ACTIVITY HISTORY</p><h1>Audit trail</h1><p class="muted">Operational records shown according to your access permissions.</p></div></div>
+  <form class="soc-filters" method="get" role="search">
+    <label>Search<input name="q" value="{{ filters.q if filters else request.args.get('q','') }}" placeholder="Search records"></label>
+    <label>Status<select name="status"><option value="">All statuses</option>{% for value in ['NEW','ACKNOWLEDGED','ESCALATED','DISMISSED','OPEN','TRIAGED','INVESTIGATING','CONTAINED','RESOLVED','CLOSED'] %}<option value="{{ value }}" {% if filters and filters.status == value %}selected{% endif %}>{{ value|title }}</option>{% endfor %}</select></label>
+    <label>Severity<select name="severity"><option value="">All severities</option>{% for value in ['LOW','MEDIUM','HIGH','CRITICAL'] %}<option value="{{ value }}" {% if filters and filters.severity == value %}selected{% endif %}>{{ value|title }}</option>{% endfor %}</select></label>
+    <button class="btn primary" type="submit">Apply filters</button><a class="btn secondary" href="{{ request.path }}">Clear</a>
+  </form>
+  <div class="soc-table-wrap"><table class="soc-table"><thead><tr><th scope="col">Audit ID</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Entity</th><th scope="col">Entity ID</th><th scope="col">Timestamp</th></tr></thead><tbody>
+  {% for item in items|default([]) %}<tr><td>{{ item.get("audit_id", "—") or "—" }}</td><td>{{ item.get("actor_name", "—") or "—" }}</td><td>{{ item.get("action", "—") or "—" }}</td><td>{{ item.get("entity_type", "—") or "—" }}</td><td>{{ item.get("entity_id", "—") or "—" }}</td><td>{{ item.get("action_time", "—") or "—" }}</td></tr>{% else %}<tr><td class="empty" colspan="6">No audit entries match these filters.</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% if pagination %}<nav class="soc-pagination" aria-label="Pagination"><span>Page {{ pagination.page }} of {{ pagination.pages }} · {{ pagination.total }} records</span><div>{% if pagination.page > 1 %}<a class="btn secondary" href="?page={{ pagination.page - 1 }}&q={{ filters.q|urlencode if filters else '' }}&status={{ filters.status|urlencode if filters else '' }}&severity={{ filters.severity|urlencode if filters else '' }}">Previous</a>{% endif %}{% if pagination.page < pagination.pages %}<a class="btn secondary" href="?page={{ pagination.page + 1 }}&q={{ filters.q|urlencode if filters else '' }}&status={{ filters.status|urlencode if filters else '' }}&severity={{ filters.severity|urlencode if filters else '' }}">Next</a>{% endif %}</div></nav>{% endif %}
+</section>
+{% endblock %}

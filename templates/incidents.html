@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}Incidents · CyberShield SOC{% endblock %}
+{% block heading %}Incidents{% endblock %}
+{% block content %}
+<section class="soc-page">
+  <div class="soc-page-head"><div><p class="eyebrow">CASE MANAGEMENT</p><h1>Incidents</h1><p class="muted">Operational records shown according to your access permissions.</p></div></div>
+  <form class="soc-filters" method="get" role="search">
+    <label>Search<input name="q" value="{{ filters.q if filters else request.args.get('q','') }}" placeholder="Search records"></label>
+    <label>Status<select name="status"><option value="">All statuses</option>{% for value in ['NEW','ACKNOWLEDGED','ESCALATED','DISMISSED','OPEN','TRIAGED','INVESTIGATING','CONTAINED','RESOLVED','CLOSED'] %}<option value="{{ value }}" {% if filters and filters.status == value %}selected{% endif %}>{{ value|title }}</option>{% endfor %}</select></label>
+    <label>Severity<select name="severity"><option value="">All severities</option>{% for value in ['LOW','MEDIUM','HIGH','CRITICAL'] %}<option value="{{ value }}" {% if filters and filters.severity == value %}selected{% endif %}>{{ value|title }}</option>{% endfor %}</select></label>
+    <button class="btn primary" type="submit">Apply filters</button><a class="btn secondary" href="{{ request.path }}">Clear</a>
+  </form>
+  <div class="soc-table-wrap"><table class="soc-table"><thead><tr><th scope="col">Incident</th><th scope="col">Title</th><th scope="col">Severity</th><th scope="col">Status</th><th scope="col">Opened</th><th scope="col">Lead investigator</th></tr></thead><tbody>
+  {% for item in items|default([]) %}<tr><td>{{ item.get("incident_id", "—") or "—" }}</td><td>{{ item.get("title", "—") or "—" }}</td><td>{{ item.get("severity", "—") or "—" }}</td><td>{{ item.get("status", "—") or "—" }}</td><td>{{ item.get("opened_at", "—") or "—" }}</td><td>{{ item.get("lead_name", "—") or "—" }}</td></tr>{% else %}<tr><td class="empty" colspan="6">No incidents found.</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% if pagination %}<nav class="soc-pagination" aria-label="Pagination"><span>Page {{ pagination.page }} of {{ pagination.pages }} · {{ pagination.total }} records</span><div>{% if pagination.page > 1 %}<a class="btn secondary" href="?page={{ pagination.page - 1 }}&q={{ filters.q|urlencode if filters else '' }}&status={{ filters.status|urlencode if filters else '' }}&severity={{ filters.severity|urlencode if filters else '' }}">Previous</a>{% endif %}{% if pagination.page < pagination.pages %}<a class="btn secondary" href="?page={{ pagination.page + 1 }}&q={{ filters.q|urlencode if filters else '' }}&status={{ filters.status|urlencode if filters else '' }}&severity={{ filters.severity|urlencode if filters else '' }}">Next</a>{% endif %}</div></nav>{% endif %}
+</section>
+{% endblock %}
