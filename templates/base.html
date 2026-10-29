@@ -14,6 +14,23 @@
 </nav><div class="sidebar-note"><span class="status-dot"></span><div><strong>Workspace status</strong><small>Oracle-backed application</small></div></div>
 <div class="side-bottom"><div class="user-mini"><div class="avatar">{{ (me.full_name or 'U')[:1]|upper }}</div><div class="user-meta"><strong>{{ me.full_name }}</strong><span>{{ me.role_code }}</span></div></div>
 <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="_csrf" value="{{ csrf_token }}"><button class="logout" type="submit">Sign out</button></form></div></aside>{% endif %}
-<main class="main {% if not me.user_id %}auth-main{% endif %}">{% if me.user_id %}<header class="topbar"><div><div class="eyebrow">SECURITY OPERATIONS CENTER</div><div class="page-title">{% block heading %}Workspace overview{% endblock %}</div></div><div class="top-right"><span class="status-dot"></span><span>Oracle-backed</span><span class="role-pill">{{ me.role_code }}</span></div></header>{% endif %}
+<main class="main {% if not me.user_id %}auth-main{% endif %}">{% if me.user_id %}<header class="topbar"><div><div class="eyebrow">SECURITY OPERATIONS CENTER</div><div class="page-title">{% block heading %}Workspace overview{% endblock %}</div></div><div class="top-right">
+<span class="status-dot"></span><span>Oracle-backed</span>
+<span class="role-pill">{{ me.role_code }}</span>
+<form method="post" action="{{ url_for('logout') }}" style="display:inline-flex;margin-left:12px">
+<input type="hidden" name="_csrf" value="{{ csrf_token }}">
+<button type="submit" style="background:#b42318;color:white;padding:10px 16px;border:0;border-radius:8px;font-weight:600;cursor:pointer">Sign Out</button>
+</form>
+</div></header>{% endif %}
 <section class="page-content">{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-stack" role="status">{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}{% endwith %}{% block content %}{% endblock %}</section>
-<footer class="footer">CYBERSHIELD SOC · Incident intelligence, handled responsibly</footer></main></body></html>
+<footer class="footer">CYBERSHIELD SOC · Incident intelligence, handled responsibly</footer></main>
+{% if me.user_id %}
+<div id="CYBERSHIELD-FIXED-SIGNOUT" style="position:fixed;right:24px;bottom:24px;z-index:99999">
+<form method="post" action="{{ url_for('logout') }}" style="margin:0">
+<input type="hidden" name="_csrf" value="{{ csrf_token }}">
+<button type="submit" style="background:#b42318;color:white;padding:14px 22px;border:2px solid white;border-radius:10px;font-size:16px;font-weight:700;box-shadow:0 4px 18px #0005;cursor:pointer">Sign Out</button>
+</form>
+</div>
+{% endif %}
+
+</body></html>

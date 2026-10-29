@@ -1,18 +1,86 @@
-{% extends 'base.html' %}
-{% block title %}Security events · CyberShield SOC{% endblock %}
-{% block heading %}Security events{% endblock %}
+{% extends "base.html" %}
+{% block title %}Security Events · CyberShield SOC{% endblock %}
+{% block heading %}Security Events{% endblock %}
 {% block content %}
 <section class="soc-page">
-  <div class="soc-page-head"><div><p class="eyebrow">SIMULATED EVENT INGESTION</p><h1>Security events</h1><p class="muted">Operational records shown according to your access permissions.</p></div></div>
-  <form class="soc-filters" method="get" role="search">
-    <label>Search<input name="q" value="{{ filters.q if filters else request.args.get('q','') }}" placeholder="Search records"></label>
-    <label>Status<select name="status"><option value="">All statuses</option>{% for value in ['NEW','ACKNOWLEDGED','ESCALATED','DISMISSED','OPEN','TRIAGED','INVESTIGATING','CONTAINED','RESOLVED','CLOSED'] %}<option value="{{ value }}" {% if filters and filters.status == value %}selected{% endif %}>{{ value|title }}</option>{% endfor %}</select></label>
-    <label>Severity<select name="severity"><option value="">All severities</option>{% for value in ['LOW','MEDIUM','HIGH','CRITICAL'] %}<option value="{{ value }}" {% if filters and filters.severity == value %}selected{% endif %}>{{ value|title }}</option>{% endfor %}</select></label>
-    <button class="btn primary" type="submit">Apply filters</button><a class="btn secondary" href="{{ request.path }}">Clear</a>
-  </form>
-  <div class="soc-table-wrap"><table class="soc-table"><thead><tr><th scope="col">Event ID</th><th scope="col">Event time</th><th scope="col">Server</th><th scope="col">Source IP</th><th scope="col">Attack type</th><th scope="col">Score</th><th scope="col">Simulated</th></tr></thead><tbody>
-  {% for item in items|default([]) %}<tr><td>{{ item.get("event_id", "—") or "—" }}</td><td>{{ item.get("event_at", "—") or "—" }}</td><td>{{ item.get("hostname", "—") or "—" }}</td><td>{{ item.get("source_ip", "—") or "—" }}</td><td>{{ item.get("attack_type", "—") or "—" }}</td><td>{{ item.get("severity_score", "—") or "—" }}</td><td>{{ item.get("is_simulated", "—") or "—" }}</td></tr>{% else %}<tr><td class="empty" colspan="7">No events found. Ingested demo events should be labelled simulated.</td></tr>{% endfor %}
-  </tbody></table></div>
-  {% if pagination %}<nav class="soc-pagination" aria-label="Pagination"><span>Page {{ pagination.page }} of {{ pagination.pages }} · {{ pagination.total }} records</span><div>{% if pagination.page > 1 %}<a class="btn secondary" href="?page={{ pagination.page - 1 }}&q={{ filters.q|urlencode if filters else '' }}&status={{ filters.status|urlencode if filters else '' }}&severity={{ filters.severity|urlencode if filters else '' }}">Previous</a>{% endif %}{% if pagination.page < pagination.pages %}<a class="btn secondary" href="?page={{ pagination.page + 1 }}&q={{ filters.q|urlencode if filters else '' }}&status={{ filters.status|urlencode if filters else '' }}&severity={{ filters.severity|urlencode if filters else '' }}">Next</a>{% endif %}</div></nav>{% endif %}
+    <div class="soc-page-head">
+        <div>
+            <p class="eyebrow">RULE-BASED EVENT SIMULATOR</p>
+            <h1>Submit a security event</h1>
+            <p class="muted">These events are simulated for demonstration. They are not collected automatically from real computers.</p>
+        </div>
+    </div>
+    {% if me.role_code in ["ADMIN", "MANAGER", "ANALYST"] %}
+    <form method="post" action="{{ url_for('events') }}" class="soc-panel">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <div class="form-grid">
+            <label>Target asset
+                <select name="server_id" required>
+                    <option value="">Select a registered asset</option>
+                    {% for asset in assets %}
+                    <option value="{{ asset.server_id }}">{{ asset.hostname }} — {{ asset.criticality }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Source IP address
+                <input name="source_ip" maxlength="45" required placeholder="e.g. 192.0.2.25">
+            </label>
+            <label>Event type
+                <select name="attack_type" required>
+                    <option value="Failed Login">Failed Login</option>
+                    <option value="Malware">Malware</option>
+                    <option value="Blocked Connection">Blocked Connection</option>
+                    <option value="Suspicious Activity">Suspicious Activity</option>
+                </select>
+            </label>
+            <label>Severity score (1–10)
+                <input type="number" name="severity_score" min="1" max="10" value="5" required>
+            </label>
+            <label>Protocol
+                <select name="protocol">
+                    <option value="SIMULATED">Simulated</option>
+                    <option value="TCP">TCP</option>
+                    <option value="UDP">UDP</option>
+                    <option value="HTTP">HTTP</option>
+                    <option value="SSH">SSH</option>
+                </select>
+            </label>
+            <label>Packet count
+                <input type="number" name="packet_count" min="0" value="1" required>
+            </label>
+            <label>Bytes observed
+                <input type="number" name="bytes_count" min="0" value="0" required>
+            </label>
+        </div>
+        <button class="btn primary" type="submit">Submit event to Oracle</button>
+    </form>
+    {% endif %}
+    <h2>Recorded events</h2>
+    <div class="soc-table-wrap">
+        <table class="soc-table">
+            <thead><tr><th>ID</th><th>Time</th><th>Asset</th><th>Source IP</th><th>Event type</th><th>Score</th><th>Simulated</th></tr></thead>
+            <tbody>
+            {% for item in items %}
+                <tr>
+                    <td>{{ item.event_id }}</td>
+                    <td>{{ item.event_at }}</td>
+                    <td>{{ item.hostname }}</td>
+                    <td>{{ item.source_ip or "—" }}</td>
+                    <td>{{ item.attack_type }}</td>
+                    <td>{{ item.severity_score }}</td>
+                    <td>{{ "Yes" if item.is_simulated == 1 else "No" }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="7">No events recorded yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </section>
+<style>
+.soc-panel{padding:20px;margin:20px 0;border:1px solid var(--border,#ddd);border-radius:12px}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:18px}
+.form-grid label{display:flex;flex-direction:column;gap:7px}
+.form-grid input,.form-grid select{padding:11px;border:1px solid #aab4c2;border-radius:7px;max-width:100%}
+</style>
 {% endblock %}

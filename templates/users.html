@@ -1,5 +1,88 @@
-{% extends 'base.html' %}{% block title %}User access · CyberShield{% endblock %}{% block heading %}User access governance{% endblock %}{% block content %}
-<div class="welcome-row"><div><div class="eyebrow">IDENTITY & ACCESS MANAGEMENT</div><h1>People, roles and engineer capabilities.</h1><p class="muted">Only the existing administrator can create engineer accounts. Passwords are hashed and never displayed after creation.</p></div></div>
-<div class="panel-form" style="margin-bottom:24px"><h2>Create engineer account</h2><p class="muted">Set the initial login credentials and choose the highest severity this engineer is authorized to handle.</p><form method="post" class="form-grid"><input type="hidden" name="_csrf" value="{{ csrf_token }}"><input type="hidden" name="action" value="create_engineer"><label>Full name<input name="full_name" required minlength="2"></label><label>Email address<input name="email" type="email" required placeholder="engineer@organization.com"></label><label>Initial password<input name="password" type="password" required minlength="8" placeholder="At least 8 characters"></label><label>Specialization<input name="specialization" required placeholder="e.g. Network Security, Forensics"></label><label>Maximum severity allowed<select name="max_severity"><option value="low">Low only</option><option value="medium" selected>Low + Medium</option><option value="high">Low + Medium + High</option><option value="critical">All severities including Critical</option></select></label><div class="form-actions"><button class="btn primary" type="submit">Create engineer account</button></div></form></div>
-<div class="notice"><span class="notice-icon">♢</span><div><strong>Customer privacy and least privilege</strong><p>Customers see only their own cases. Engineers see a work queue of incident summaries matching their severity capability; full case details and conversations require customer approval. Admin can manage all 19 core tables but cannot view passwords.</p></div></div>
-<div class="table-card"><table><thead><tr><th>User</th><th>Email</th><th>Role</th><th>Specialization</th><th>Max severity</th><th>Status</th><th>Created</th><th>Update</th></tr></thead><tbody>{% for u in users %}<tr><td><strong>{{ u.full_name }}</strong><div class="subtext">User #{{ u.user_id }}</div></td><td>{{ u.email }}</td><td>{{ u.role|title }}</td><td>{{ u.specialization or 'General Security' }}</td><td><span class="severity {{ u.max_severity or 'critical' }}">{{ (u.max_severity or 'critical')|title }}</span></td><td><span class="state {{ 'active' if u.is_active else 'disabled' }}">{{ 'Active' if u.is_active else 'Disabled' }}</span></td><td>{{ u.created_at }}</td><td><form method="post" class="user-edit-form"><input type="hidden" name="_csrf" value="{{ csrf_token }}"><input type="hidden" name="action" value="update"><input type="hidden" name="user_id" value="{{ u.user_id }}"><select name="role"><option value="admin" {% if u.role=='admin' %}selected{% endif %}>Admin</option><option value="complainer" {% if u.role=='complainer' %}selected{% endif %}>Complainer</option><option value="engineer" {% if u.role=='engineer' %}selected{% endif %}>Engineer</option></select><select name="is_active"><option value="1" {% if u.is_active %}selected{% endif %}>Active</option><option value="0" {% if not u.is_active %}selected{% endif %}>Disabled</option></select><input name="specialization" value="{{ u.specialization or 'General Security' }}" placeholder="Specialization"><select name="max_severity"><option value="low" {% if u.max_severity=='low' %}selected{% endif %}>Low</option><option value="medium" {% if u.max_severity=='medium' %}selected{% endif %}>Medium</option><option value="high" {% if u.max_severity=='high' %}selected{% endif %}>High</option><option value="critical" {% if u.max_severity=='critical' %}selected{% endif %}>Critical</option></select><button class="btn secondary small" type="submit">Save</button></form></td></tr>{% endfor %}</tbody></table></div>{% endblock %}
+{% extends "base.html" %}
+{% block title %}User Access · CyberShield SOC{% endblock %}
+{% block heading %}User access management{% endblock %}
+{% block content %}
+<div class="panel">
+    <h2>Create account</h2>
+    <p>Create an account for a member of the Security Operations Center.</p>
+    <form method="post" action="{{ url_for('admin_users') }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="action" value="create">
+        <div class="form-grid">
+            <label>Full name
+                <input type="text" name="full_name" maxlength="200" required>
+            </label>
+            <label>Email address
+                <input type="email" name="email" maxlength="320" required>
+            </label>
+            <label>Temporary password
+                <input type="password" name="password" minlength="8" autocomplete="new-password" required>
+            </label>
+            <label>Role
+                <select name="role_code" required>
+                    <option value="ANALYST">Analyst</option>
+                    <option value="MANAGER">Manager</option>
+                    <option value="AUDITOR">Auditor</option>
+                    <option value="ADMIN">Admin</option>
+                </select>
+            </label>
+        </div>
+        <button type="submit">Create account</button>
+    </form>
+</div>
+
+<div class="panel">
+    <h2>Existing accounts</h2>
+    <p>{{ users|length }} account(s) in the Oracle database.</p>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Created</th><th>Save changes</th></tr>
+            </thead>
+            <tbody>
+            {% for u in users %}
+                <tr>
+                    <td>{{ u.full_name }}</td>
+                    <td>{{ u.email }}</td>
+                    <td colspan="4">
+                        <form method="post" action="{{ url_for('admin_users') }}" class="user-update-form">
+                            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+                            <input type="hidden" name="action" value="update">
+                            <input type="hidden" name="user_id" value="{{ u.user_id }}">
+                            <label>Role
+                                <select name="role_code" required>
+                                    {% for r in ['ADMIN', 'MANAGER', 'ANALYST', 'AUDITOR'] %}
+                                    <option value="{{ r }}" {% if u.role_code == r %}selected{% endif %}>{{ r }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                            <label>Status
+                                <select name="is_active" required>
+                                    <option value="1" {% if u.is_active == 1 %}selected{% endif %}>Active</option>
+                                    <option value="0" {% if u.is_active == 0 %}selected{% endif %}>Inactive</option>
+                                </select>
+                            </label>
+                            <span>{{ u.created_at }}</span>
+                            <button type="submit">Save</button>
+                        </form>
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td colspan="6">No user accounts found.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+.panel { background: var(--panel, #fff); border: 1px solid var(--border, #ddd); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin: 18px 0; }
+.form-grid label, .user-update-form label { display: flex; flex-direction: column; gap: 6px; }
+input, select { padding: 10px; border: 1px solid #b9c3d0; border-radius: 7px; max-width: 100%; }
+button { padding: 10px 16px; border: 0; border-radius: 7px; cursor: pointer; }
+.table-wrap { overflow-x: auto; }
+.user-update-form { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; }
+.user-update-form select { min-width: 110px; }
+</style>
+{% endblock %}

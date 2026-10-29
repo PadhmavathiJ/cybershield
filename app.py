@@ -6,7 +6,7 @@ import secrets
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 from flask import (
     Flask, abort, flash, redirect, render_template, request, send_file,
     session, url_for, Response
@@ -185,9 +185,7 @@ def paged(items):
 
 @app.get("/")
 def home():
-    if not current_user():
-        return redirect(url_for("login"))
-    return dashboard()
+    return redirect(url_for("login"))
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -261,12 +259,71 @@ def dashboard():
     incidents = safe_read(f"SELECT * FROM {obj('vw_open_incidents')} ORDER BY opened_at DESC FETCH FIRST 8 ROWS ONLY")
     return render_template("dashboard.html", summary=summary or {}, recent_events=recent, recent_incidents=incidents)
 
-@app.get("/servers")
-@login_required
+@app.route("/servers", methods=["GET", "POST"])
+@roles_required("ADMIN")
 def servers():
-    items = safe_read(f"SELECT server_id, hostname, os_name, department, criticality, is_active FROM {obj('server')} ORDER BY hostname")
+    if request.method == "POST":
+        hostname = request.form.get("hostname", "").strip()
+        os_name = request.form.get("os_name", "").strip()
+        department = request.form.get("department", "").strip()
+        criticality = request.form.get("criticality", "").strip().upper()
+
+        if not hostname:
+            flash("Hostname is required.", "error")
+            return redirect(url_for("servers"))
+
+        if criticality not in {"LOW", "MEDIUM", "HIGH", "CRITICAL"}:
+            flash("Select a valid criticality.", "error")
+            return redirect(url_for("servers"))
+
+        con = get_connection()
+        cur = None
+        try:
+            cur = con.cursor()
+            cur.execute(
+                f"SELECT COUNT(*) FROM {obj('server')} WHERE UPPER(hostname)=UPPER(:hostname)",
+                {"hostname": hostname}
+            )
+
+            if cur.fetchone()[0]:
+                flash("A server with this hostname already exists.", "error")
+                return redirect(url_for("servers"))
+
+            cur.execute(
+                f"""INSERT INTO {obj('server')}
+                (hostname, os_name, department, criticality, is_active)
+                VALUES (:hostname, :os_name, :department, :criticality, 1)""",
+                {
+                    "hostname": hostname,
+                    "os_name": os_name or None,
+                    "department": department or None,
+                    "criticality": criticality
+                }
+            )
+            con.commit()
+            flash("Server registered successfully in Oracle.", "success")
+        except Exception:
+            con.rollback()
+            app.logger.exception("Server registration failed")
+            flash("Server registration failed. Check the Flask terminal for details.", "error")
+        finally:
+            if cur is not None:
+                cur.close()
+            con.close()
+
+        return redirect(url_for("servers"))
+
+    items = safe_read(
+        f"SELECT server_id, hostname, os_name, department, criticality, is_active "
+        f"FROM {obj('server')} ORDER BY hostname"
+    )
     items, pagination = paged(items)
-    return render_template("servers.html", items=items, pagination=pagination, filters=filter_context())
+    return render_template(
+        "servers.html",
+        items=items,
+        pagination=pagination,
+        filters=filter_context()
+    )
 
 @app.get("/events")
 @login_required
@@ -600,11 +657,109 @@ def settings():
     policies = safe_read(f"SELECT policy_key,number_value,description FROM {obj('soc_policy')} ORDER BY policy_key")
     return render_template("settings.html", users=users, attack_types=attack_types, policies=policies)
 
-@app.get("/admin/users")
+@app.route("/admin/users", methods=["GET", "POST"])
 @roles_required("ADMIN")
 def admin_users():
-    users = safe_read(f"SELECT user_id,full_name,email,role_code,is_active FROM {obj('app_user')} ORDER BY full_name")
-    return render_template("users.html", users=users, investigators=[])
+    if request.method == "POST":
+        action = request.form.get("action", "").strip().lower()
+
+        if action == "create":
+            name = request.form.get("full_name", "").strip()
+            email = request.form.get("email", "").strip()
+            password = request.form.get("password", "")
+            role_code = request.form.get("role_code", "").strip().upper()
+
+            if not name or not email or not password:
+                flash("Name, email and password are required.", "error")
+            elif len(name) > 200 or len(email) > 320:
+                flash("Name or email is too long.", "error")
+            elif len(password) < 8:
+                flash("Password must contain at least 8 characters.", "error")
+            elif role_code not in ROLES:
+                flash("Select a valid role.", "error")
+            else:
+                con = get_connection()
+                cur = None
+                try:
+                    cur = con.cursor()
+                    cur.execute(
+                        f"SELECT COUNT(*) FROM {obj('app_user')} WHERE LOWER(email)=:email",
+                        {"email": email.lower()}
+                    )
+                    if cur.fetchone()[0]:
+                        flash("An account with that email already exists.", "error")
+                    else:
+                        cur.execute(
+                            f"""INSERT INTO {obj('app_user')}
+                            (email, password_hash, full_name, role_code, is_active)
+                            VALUES (:email, :password_hash, :full_name, :role_code, 1)""",
+                            {
+                                "email": email,
+                                "password_hash": generate_password_hash(password),
+                                "full_name": name,
+                                "role_code": role_code
+                            }
+                        )
+                        con.commit()
+                        flash("User account created successfully.", "success")
+                except Exception:
+                    con.rollback()
+                    app.logger.exception("Could not create user account")
+                    flash("Could not create account. Check the application log.", "error")
+                finally:
+                    if cur is not None:
+                        cur.close()
+                    con.close()
+
+        elif action == "update":
+            user_id = request.form.get("user_id", "").strip()
+            role_code = request.form.get("role_code", "").strip().upper()
+            is_active = request.form.get("is_active", "").strip()
+
+            if not user_id.isdigit() or role_code not in ROLES or is_active not in {"0", "1"}:
+                flash("Invalid user update details.", "error")
+            elif int(user_id) == int(actor_id()) and (role_code != "ADMIN" or is_active != "1"):
+                flash("You cannot remove your own administrator access or deactivate yourself.", "error")
+            else:
+                con = get_connection()
+                cur = None
+                try:
+                    cur = con.cursor()
+                    cur.execute(
+                        f"""UPDATE {obj('app_user')}
+                        SET role_code=:role_code, is_active=:is_active
+                        WHERE user_id=:user_id""",
+                        {
+                            "role_code": role_code,
+                            "is_active": int(is_active),
+                            "user_id": int(user_id)
+                        }
+                    )
+                    if cur.rowcount:
+                        con.commit()
+                        flash("User account updated.", "success")
+                    else:
+                        con.rollback()
+                        flash("User account was not found.", "error")
+                except Exception:
+                    con.rollback()
+                    app.logger.exception("Could not update user account")
+                    flash("Could not update account. Check the application log.", "error")
+                finally:
+                    if cur is not None:
+                        cur.close()
+                    con.close()
+        else:
+            flash("Invalid user-management action.", "error")
+
+        return redirect(url_for("admin_users"))
+
+    users = safe_read(
+        f"""SELECT user_id, full_name, email, role_code, is_active, created_at
+        FROM {obj('app_user')} ORDER BY full_name"""
+    )
+    return render_template("users.html", users=users)
+
 
 @app.get("/tables")
 @roles_required("ADMIN")
