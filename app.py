@@ -325,16 +325,32 @@ def servers():
         filters=filter_context()
     )
 
+
+
 @app.get("/events")
 @login_required
 def events():
     items = safe_read(f"""SELECT e.event_id,e.event_at,s.hostname,ip.ip_text AS source_ip,
         at.name AS attack_type,e.severity_score,e.is_simulated,e.protocol,e.packet_count,e.bytes_in,e.bytes_out
-        FROM {obj('security_event')} e JOIN {obj('server')} s ON s.server_id=e.server_id
+        FROM {obj('security_event')} e
+        JOIN {obj('server')} s ON s.server_id=e.server_id
         JOIN {obj('ip_address')} ip ON ip.ip_id=e.source_ip_id
-        JOIN {obj('attack_type')} at ON at.attack_type_id=e.attack_type_id ORDER BY e.event_at DESC""")
+        JOIN {obj('attack_type')} at ON at.attack_type_id=e.attack_type_id
+        ORDER BY e.event_at DESC""")
     items, pagination = paged(items)
-    return render_template("events.html", items=items, pagination=pagination, filters=filter_context())
+    servers = safe_read(f"SELECT server_id, hostname FROM {obj('server')} WHERE is_active = 1 ORDER BY hostname")
+    attack_types = safe_read(f"SELECT attack_type_id, name FROM {obj('attack_type')} ORDER BY name")
+    source_ips = safe_read(f"SELECT ip_id, ip_text FROM {obj('ip_address')} ORDER BY ip_text")
+    return render_template(
+        'events.html',
+        items=items,
+        pagination=pagination,
+        filters=filter_context(),
+        servers=servers,
+        attack_types=attack_types,
+        source_ips=source_ips
+    )
+
 
 @app.get("/events/<int:event_id>")
 @login_required
